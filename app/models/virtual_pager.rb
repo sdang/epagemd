@@ -5,12 +5,14 @@ include REXML
 class VirtualPager < ActiveRecord::Base
   has_many :pagers
   has_many :page_logs
-  validates_uniqueness_of :name
-  validates_presence_of :name
+  validates_uniqueness_of :name, :short_code
+  validates_presence_of :name, :short_code
   
   def send_page(msg,pager_list=nil) 
     # don't send a request if there is no point!
-    return false if self.number_of_pagers_signed_on < 1
+    # this line is preventing notifications of people 
+    # being the last signed off pager
+    # return false if self.number_of_pagers_signed_on < 1
 	
   	# are we handed a list of pagers to send to? If so, use
   	# that list, if not, get the list of all pagers currently
@@ -24,44 +26,48 @@ class VirtualPager < ActiveRecord::Base
     # variable to store if the pager successfully was sent to at least 1 person
     succeeded = 0
     
-    pager_numbers.each do |pn|
-        # American Messaging WCTP URL
-        target_url = 'http://wctp.amsmsg.net/wctp'
-        url = URI.parse(target_url)
-        request = Net::HTTP::Post.new(url.path)
+    begin
+      pager_numbers.each do |pn|
+          # American Messaging WCTP URL
+          target_url = 'http://wctp.amsmsg.net/wctp'
+          url = URI.parse(target_url)
+          request = Net::HTTP::Post.new(url.path)
     
-        # generate XMl request
-        xml_request = VirtualPager.create_xml_single(msg,pn)
-        request.body = xml_request
+          # generate XMl request
+          xml_request = VirtualPager.create_xml_single(msg,pn)
+          request.body = xml_request
     
-        # Multi-thread pages, improves page repsonsiveness to large blasts
-        # send request
-        if PROXY['use_proxy']
-        	response = Net::HTTP::Proxy(PROXY['proxy_url'], PROXY['proxy_port'], PROXY['proxy_username'], PROXY['proxy_password']).start(url.host, url.port) {|http| http.request(request)}
-        else
-        	response = Net::HTTP.start(url.host, url.port) {|http| http.request(request)}
-        end
+          # Multi-thread pages, improves page repsonsiveness to large blasts
+          # send request
+          if PROXY['use_proxy']
+          	response = Net::HTTP::Proxy(PROXY['proxy_url'], PROXY['proxy_port'], PROXY['proxy_username'], PROXY['proxy_password']).start(url.host, url.port) {|http| http.request(request)}
+          else
+          	response = Net::HTTP.start(url.host, url.port) {|http| http.request(request)}
+          end
     
-        # log the message
+          # log the message
         
-        doc = Document.new response.body
-        if doc.root.elements["wctp-Confirmation"].elements["wctp-Success"]
-          status_code = 200 
-          status_message = "Message accepted by wctp.amsmsg.net"
-          succeeded += 1
-        else
-          status_code = doc.root.elements["wctp-Confirmation"].elements["wctp-Failure"].attributes["errorCode"]
-          status_message = doc.root.elements["wctp-Confirmation"].elements["wctp-Failure"].attributes["errorText"]
-        end
+          doc = Document.new response.body
+          if doc.root.elements["wctp-Confirmation"].elements["wctp-Success"]
+            status_code = 200 
+            status_message = "Message accepted by wctp.amsmsg.net"
+            succeeded += 1
+          else
+            status_code = doc.root.elements["wctp-Confirmation"].elements["wctp-Failure"].attributes["errorCode"]
+            status_message = doc.root.elements["wctp-Confirmation"].elements["wctp-Failure"].attributes["errorText"]
+          end
 		
-    		if self.log_messages
-    		  log_message = msg
-    		else
-    		  log_message = "xxx (logging disabled) xxx"
-    		end
+      		if self.log_messages
+      		  log_message = msg
+      		else
+      		  log_message = "xxx (logging disabled) xxx"
+      		end
     		
-        self.page_logs.create(:pager_number => pn, :message => log_message, :status => status_code, :status_message => status_message)
+          self.page_logs.create(:pager_number => pn, :message => log_message, :status => status_code, :status_message => status_message)
         
+      end
+    rescue
+      return false
     end
     
     if succeeded < 1
@@ -95,10 +101,9 @@ class VirtualPager < ActiveRecord::Base
       return nil if self.is_pager_signed_on?(pg_i)
       pager = self.pagers.create(:pager_number => pg_i)
 	  
-	  # Send notification to the user that they are signed on
-	  if pager
-		self.send_page("You are now covering: #{self.name}", [pager.pager_number])
-	  end
+  	  # Send notification to the user that they are signed on
+		  self.send_page("You are now covering: #{self.name}", [pager.pager_number]) if pager
+		  return true
     else
       return nil
     end

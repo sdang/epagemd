@@ -1,42 +1,60 @@
 class SignOntoPagerController < ApplicationController
   
   def index
-    @virtual_pagers = VirtualPager.find(:all, :order => "name")
+   @sign_on_off = SignOntoPager.new
   end
   
   def multiple
+    unless params[:pager_number]
+      @sign_onoff_multiple = SignOnoffMultiple.new
+      render :template => "sign_onto_pager/multiple_pager_number"
+      return false
+    end
+    
+    @sign_onoff_multiple = SignOnoffMultiple.new(:pager_number => params[:pager_number])
+    unless @sign_onoff_multiple.valid?
+      flash.now[:error] = "Must provide valid pager number"
+      render :template => "sign_onto_pager/multiple_pager_number"
+      return false
+    end
+  end
+  
+  def process_multiple
+    @sign_onoff_multiple = SignOnoffMultiple.new(:pager_number => params[:pager_number], :virtual_pagers => params[:virtual_pager_id])
+    unless @sign_onoff_multiple.valid?
+      flash.now[:error] = "Must provide valid pager number"
+      render :template => "sign_onto_pager/multiple_pager_number"
+      return false
+    end
+
+    if @sign_onoff_multiple.update
+      # return list of signed on pagers
+      pagr_str = @sign_onoff_multiple.list_signed_on.collect{|x| x.name}.join(", ")
+      if pagr_str == ""
+        flash[:notice] = "You have been signed off all pagers"
+      else
+        flash[:notice] = "You are covering: " + pagr_str
+      end
+      redirect_to :action => "index"
+    else
+      flash[:error] = "Unable to update virtual pagers"
+      redirect_to :action => "multiple", :pager_number => @sign_onoff_multiple.pager_number
+    end
   end
   
   def add_pager
-    @virtual_pagers = VirtualPager.find(:all, :order => "name")
-    # validate form first
-    flash[:error] = "".html_safe
-    flash[:error] += "Must select a valid pager id <br/>".html_safe if params[:virtual_pager_id] == nil
-    flash[:error] += "Must enter a pager number <br/>".html_safe if params[:pager_number] == ""
-    flash[:error] += "Must select either sign on or sign off <br/>".html_safe if params[:sign_on_off] == nil
-    if flash[:error] != ""
-      redirect_to :action => 'index' 
-      return nil
-    end
-    
-    vp = VirtualPager.find_by_id(params[:virtual_pager_id])
-    if params[:sign_on_off] == 'ON'
-      if vp.add_pager(params[:pager_number])
-        flash[:notice] = "Added pager #{params[:pager_number]} to #{vp.name}"
+    @sign_on_off = SignOntoPager.new(params[:sign_onto_pager])
+    if @sign_on_off.valid?
+      if @sign_on_off.process
+        flash[:notice] = "#{@sign_on_off.pager_number} Signed #{@sign_on_off.sign_on_off} pager"
+        redirect_to :action => "index"
       else
-        flash[:error] = "Invalid pager number, or pager already signed onto this virtual pager"
+        flash.now[:error] = "ERROR: unable to sign on/off pager"
+        render :action => 'index'
       end
+    else
+      render :action => 'index'
     end
-    
-    if params[:sign_on_off] == 'OFF'
-      if vp.remove_pager(params[:pager_number])
-        flash[:notice] = "Removed pager #{params[:pager_number]} from #{vp.name}"
-      else
-        flash[:error] = "Unable to remove pager #{params[:pager_number]}, are you sure it was signed on?"
-      end
-    end
-    
-    render :action => 'index'
   end
   
 end
