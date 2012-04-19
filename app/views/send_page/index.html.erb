@@ -14,7 +14,7 @@
 		<td width="10">&nbsp;</td>
 		<td style='font-size: 20px'>
 			<%= f.label :virtual_pager_id, "Select a Pager:"%><br/>
-			<%= f.select "virtual_pager_id", options_from_collection_for_select(VirtualPager.pagers, "id", "name"), :include_blank => true %>
+			<%= f.select "virtual_pager_id", options_from_collection_for_select(VirtualPager.pagers, "id", "name", @routine_page.virtual_pager_id), :include_blank => true %>
 			<br/>
 			<br/>
 		</td>

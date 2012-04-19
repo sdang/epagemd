@@ -14,6 +14,7 @@ VirtualPagers::Application.routes.draw do
   match 'log/:id' => "view_logs#index"
   match 'admin' => "virtual_pager#index" 
   
+  match 'send_page/:pager(/:mrn)' => "send_page#index"
   resources :virtual_pagers, :sign_onto_pager, :send_page, :view_logs
 
   # You can have the root of your site routed with "root"

@@ -2,6 +2,10 @@ class SendPageController < ApplicationController
   
   def index
     @routine_page = RoutinePage.new
+    @routine_page.patient_id = params[:mrn] if params[:mrn]
+    if params[:pager]
+      @routine_page.virtual_pager_id = VirtualPager.find_by_name(params[:pager]).id rescue nil
+    end
   end
   
   def send_page
